@@ -1,0 +1,8 @@
+{
+  "accuracies": {
+    "Logistic Regression": 0.964,
+    "Multinomial Naive Bayes": 0.843,
+    "Linear SVM": 0.968
+  },
+  "best_model": "Linear SVM"
+}
