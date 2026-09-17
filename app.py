@@ -34,6 +34,32 @@ def load_rnn_assets():
     return model, tokenizer, label_encoder, rnn_results
 
 
+@st.cache_resource
+def load_lstm_assets():
+    import tensorflow as tf
+    model = tf.keras.models.load_model("models/lstm_model.keras")
+    with open("models/lstm_gru_tokenizer.pkl", "rb") as f:
+        tokenizer = pickle.load(f)
+    with open("models/lstm_gru_label_encoder.pkl", "rb") as f:
+        label_encoder = pickle.load(f)
+    with open("models/lstm_results.json") as f:
+        lstm_results = json.load(f)
+    return model, tokenizer, label_encoder, lstm_results
+
+
+@st.cache_resource
+def load_gru_assets():
+    import tensorflow as tf
+    model = tf.keras.models.load_model("models/gru_model.keras")
+    with open("models/lstm_gru_tokenizer.pkl", "rb") as f:
+        tokenizer = pickle.load(f)
+    with open("models/lstm_gru_label_encoder.pkl", "rb") as f:
+        label_encoder = pickle.load(f)
+    with open("models/gru_results.json") as f:
+        gru_results = json.load(f)
+    return model, tokenizer, label_encoder, gru_results
+
+
 from preprocessing import clean_text
 
 LABEL_COLORS = {
@@ -56,8 +82,8 @@ LABEL_EMOJI = {
 st.sidebar.title("⚙️ Settings")
 approach = st.sidebar.radio(
     "Choose the model type:",
-    ["Machine Learning", "SimpleRNN (Deep Learning)"],
-    help="Pick a classical ML model (TF-IDF based) or the SimpleRNN deep learning model.",
+    ["Machine Learning", "SimpleRNN (Deep Learning)", "LSTM (Deep Learning)", "GRU (Deep Learning)"],
+    help="Pick a classical ML model (TF-IDF based) or one of the deep learning models.",
 )
 
 ml_model_choice = None
@@ -65,16 +91,23 @@ if approach == "Machine Learning":
     vectorizer, ml_models, ml_results = load_ml_assets()
     ml_model_choice = st.sidebar.selectbox("Choose ML algorithm:", list(ml_models.keys()))
     st.sidebar.metric("Validation Accuracy", f"{ml_results['accuracies'][ml_model_choice]*100:.2f}%")
-else:
+elif approach == "SimpleRNN (Deep Learning)":
     rnn_model, tokenizer, label_encoder, rnn_results = load_rnn_assets()
     st.sidebar.metric("Validation Accuracy", f"{rnn_results['accuracy']*100:.2f}%")
+elif approach == "LSTM (Deep Learning)":
+    lstm_model, tokenizer, label_encoder, lstm_results = load_lstm_assets()
+    st.sidebar.metric("Validation Accuracy", f"{lstm_results['accuracy']*100:.2f}%")
+else:  # GRU (Deep Learning)
+    gru_model, tokenizer, label_encoder, gru_results = load_gru_assets()
+    st.sidebar.metric("Validation Accuracy", f"{gru_results['accuracy']*100:.2f}%")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
     "**About**\n\n"
     "This app classifies tweet sentiment as **Positive**, **Negative**, **Neutral**, "
     "or **Irrelevant**, using either classical Machine Learning models (TF-IDF + "
-    "Logistic Regression / Naive Bayes / Linear SVM) or a **SimpleRNN** deep learning model."
+    "Logistic Regression / Naive Bayes / Linear SVM) or a deep learning model "
+    "(**SimpleRNN**, **LSTM**, or **GRU**)."
 )
 
 # ----------------------------------------------------------------------------
@@ -118,11 +151,30 @@ if analyze:
                 classes = model.classes_
 
             label = pred
-        else:
+
+        elif approach == "SimpleRNN (Deep Learning)":
             seq = tokenizer.texts_to_sequences([cleaned])
             from tensorflow.keras.preprocessing.sequence import pad_sequences
             padded = pad_sequences(seq, maxlen=rnn_results["max_len"], padding="post", truncating="post")
             proba_arr = rnn_model.predict(padded, verbose=0)[0]
+            classes = label_encoder.classes_
+            proba = proba_arr
+            label = classes[int(np.argmax(proba_arr))]
+
+        elif approach == "LSTM (Deep Learning)":
+            seq = tokenizer.texts_to_sequences([cleaned])
+            from tensorflow.keras.preprocessing.sequence import pad_sequences
+            padded = pad_sequences(seq, maxlen=lstm_results["max_len"], padding="post", truncating="post")
+            proba_arr = lstm_model.predict(padded, verbose=0)[0]
+            classes = label_encoder.classes_
+            proba = proba_arr
+            label = classes[int(np.argmax(proba_arr))]
+
+        else:  # GRU (Deep Learning)
+            seq = tokenizer.texts_to_sequences([cleaned])
+            from tensorflow.keras.preprocessing.sequence import pad_sequences
+            padded = pad_sequences(seq, maxlen=gru_results["max_len"], padding="post", truncating="post")
+            proba_arr = gru_model.predict(padded, verbose=0)[0]
             classes = label_encoder.classes_
             proba = proba_arr
             label = classes[int(np.argmax(proba_arr))]
@@ -158,6 +210,8 @@ st.markdown("---")
 with st.expander("📊 Model accuracy comparison (ML vs Deep Learning)"):
     st.image("assets/accuracy_comparison.png", use_container_width=True)
     st.image("assets/rnn_training_curves.png", use_container_width=True)
+    st.image("assets/final_accuracy_comparison.png", use_container_width=True)
+    st.image("assets/training_curves_comparison.png", use_container_width=True)
     st.caption(
         "All models were trained on the Twitter Sentiment Analysis dataset "
         "(74,682 training tweets, 4 classes: Positive / Negative / Neutral / Irrelevant) "
